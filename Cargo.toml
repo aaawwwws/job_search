@@ -1,0 +1,16 @@
+[package]
+name = "job_search"
+version = "0.1.0"
+edition = "2021"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1.14.0", features = ["full"] }
+reqwest = {version = "0.11",features = ["blocking"]}
+scraper = "0.18.1"
+async-trait = "0.1.74"
+chromiumoxide = { version = "0.5.5",default-features = false, features = ["tokio-runtime"] }
+tokio-stream = "0.1.8"
+async-std = { version = "1.12.0", features = ["attributes"]}
+futures = "0.3.29"
+thiserror= "1"
