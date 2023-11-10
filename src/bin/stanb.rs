@@ -1,21 +1,21 @@
 #![no_main]
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
 use chromiumoxide::{Browser, BrowserConfig, Element, Page};
 use futures::StreamExt;
 #[path = "./region.rs"]
 pub mod region;
 #[path = "./resultdata.rs"]
-pub mod resultdata;
-
-pub struct Indeed {
+mod resultdata;
+pub struct Stanb {
     url: String,
 }
 
-impl Indeed {
+impl Stanb {
     pub fn new(data: &region::Region) -> Self {
-        let search_url = String::from("https://jp.indeed.com/jobs?q=&l=");
-        let u = format!("{}{}", search_url, data.get_region());
-        return Self { url: u };
+        let search_url = String::from("https://jp.stanby.com/search?l=");
+        Self {
+            url: format!("{}{}", &search_url, data.get_region()),
+        }
     }
 
     async fn tag_search_lacation(
@@ -59,6 +59,28 @@ impl Indeed {
         return Ok(vec);
     }
 
+    async fn tag_search_s(&self, elements: &Vec<Element>, tag: &str) -> anyhow::Result<LocAmoEmp> {
+        let mut locations: Vec<String> = vec![];
+        let mut amounts: Vec<String> = vec![];
+        let mut employment_status: Vec<String> = vec![];
+        for i in 0..elements.len() {
+            let Ok(tag) = elements[i].find_elements(tag).await else {
+                return Err(anyhow!("タグが見つかりませんでした"));
+            };
+            for j in 0..tag.len() {
+                let Ok(text) = tag[j].inner_text().await else {
+                    return Err(anyhow!("タグが見つかりませんでした"));
+                };
+                match j % 3 {
+                    0 => locations.push(text.unwrap()),
+                    1 => amounts.push(text.unwrap()),
+                    _ => employment_status.push(text.unwrap()),
+                }
+            }
+        }
+        return Ok(LocAmoEmp::new(locations, amounts, employment_status));
+    }
+
     //タグの属性から値を取り出したい場合.
     async fn tag_search_at(
         &self,
@@ -81,7 +103,6 @@ impl Indeed {
         return Ok(vec);
     }
 
-    //ランメソッド
     pub async fn run(&self) -> anyhow::Result<Vec<resultdata::ResultData>> {
         let Ok((browser, mut handler)) = Browser::launch(
             BrowserConfig::builder()
@@ -109,62 +130,50 @@ impl Indeed {
             return Err(anyhow!("ページが開けませんでした"));
         };
 
-        let Ok(elements) = page.find_elements("div.job_seen_beacon").await else {
-            return Err(anyhow!("タグが見つかりませんでした"));
+        let Ok(elements) = page.find_elements(".job-list-item").await else {
+            return Err(anyhow!("タグが取得できませんでした。"));
         };
 
-        let Ok(atag_texts) = self.tag_search(&elements, "h2 > a").await else {
-            return Err(anyhow!("タグが見つかりませんでした"));
-        };
+        let title = self.tag_search(&elements, "h2").await?;
 
-        let com_tag = String::from("span.css-1x7z1ps.eu4oa1w0");
+        let com_names = self.tag_search(&elements, "p[class='company']").await?;
 
-        let Ok(com_names) = self.tag_search(&elements, &com_tag).await else {
-            return Err(anyhow!("タグが見つかりませんでした"));
-        };
+        let lae = self.tag_search_s(&elements, "p.property-item-main").await?;
 
-        let location_tag = String::from("div.css-t4u72d.eu4oa1w0");
+        print!(
+            "{:?}{:?}{:?}",
+            lae.get_location(),
+            lae.get_amout(),
+            lae.get_employment_status()
+        );
+        lae.amounts;
 
-        let Ok(locations) = self.tag_search_lacation(&elements, &location_tag).await else {
-            return Err(anyhow!("タグが見つかりませんでした"));
-        };
+        let mut v = vec![];
+        return Ok(v);
+    }
+}
 
-        let amount_tag = String::from("div.salary-snippet > span");
+struct LocAmoEmp {
+    locations: Vec<String>,
+    amounts: Vec<String>,
+    employment_status: Vec<String>,
+}
 
-        let Ok(amounts) = self.tag_search(&elements, &amount_tag).await else {
-            return Err(anyhow!("タグが見つかりませんでした"));
-        };
-
-        let employment_status_tag =
-            String::from("div.heading6.tapItem-gutter.metadataContainer > div[class='metadata'] ");
-
-        let Ok(employment_status) = self.tag_search(&elements, &employment_status_tag).await else {
-            return Err(anyhow!("タグが見つかりませんでした"));
-        };
-
-        print!("{:?}", employment_status);
-
-        let Ok(descriptions) = self.tag_search(&elements, "div.job-snippet").await else {
-            return Err(anyhow!("タグが見つかりませんでした"));
-        };
-
-        let Ok(atag_urls) = self.tag_search_at(&elements, "h2 > a", "href").await else {
-            return Err(anyhow!("タグが見つかりませんでした"));
-        };
-
-        let mut vec: Vec<resultdata::ResultData> = vec![];
-        let indeed = String::from("https://jp.indeed.com");
-        for i in 0..elements.len() {
-            vec.push(resultdata::ResultData::new(
-                &atag_texts[i],
-                &com_names[i],
-                &locations[i],
-                &amounts[i],
-                &employment_status[i],
-                &descriptions[i],
-                format!("{}{}", indeed, &atag_urls[i]).as_str(),
-            ))
+impl LocAmoEmp {
+    fn new(locations: Vec<String>, amounts: Vec<String>, employment_status: Vec<String>) -> Self {
+        Self {
+            locations,
+            amounts,
+            employment_status,
         }
-        return Ok(vec);
+    }
+    fn get_location(&self) -> &Vec<String> {
+        return &self.locations;
+    }
+    fn get_amout(&self) -> &Vec<String> {
+        return &self.amounts;
+    }
+    fn get_employment_status(&self) -> &Vec<String> {
+        return &self.employment_status;
     }
 }

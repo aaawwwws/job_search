@@ -1,3 +1,4 @@
+#![no_main]
 pub struct Region {
     region: String,
 }
